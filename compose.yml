@@ -1,0 +1,131 @@
+services:
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
+    hostname: cloudflare-tunnel
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    network_mode: "host"
+    command: tunnel run --token $CLOUDFLARE_TUNNEL_TOKEN
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  api:
+  # sinflair.com
+    build:
+      context: api/
+      dockerfile: Dockerfile
+    network_mode: "host"
+    volumes:
+      - ./api/src:/src
+      - ./api/static:/static
+    
+  fileServer:
+    # fs.sinflair.com
+    image: sigoden/dufs
+    container_name: dufs
+    ports:
+      - 5000:5000
+    command: /data -A -a sinflair:DanielEbert97@/:rw
+    volumes:
+      - /root/dufs/:/data
+
+  notes:
+    # notes.sinflair.com
+    image: b3log/siyuan
+    container_name: notes
+    command: ['--workspace=/root/notes', '--accessAuthCode=DanielEbert97']
+    ports:
+      - 6806:6806
+    volumes:
+      - /root/notes:/root/notes
+      - /tmp/siyuan:/home/siyuan
+    environment:
+      - TZ=Europe/Berlin
+      - PUID=0
+      - PGID=0
+      - HOME=/root
+
+  excalidraw:
+    # draw.sinflair.com
+    container_name: excalidraw
+    image: excalidraw/excalidraw:latest
+    ports:
+      - "3030:80"
+    restart: on-failure 
+
+  beszel:
+    # monitor.sinflair.com
+    image: henrygd/beszel:latest
+    container_name: beszel
+    restart: unless-stopped
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    network_mode: host
+    volumes:
+      - /root/beszel_data:/beszel_data
+
+  beszel-agent:
+    image: "henrygd/beszel-agent"
+    container_name: "beszel-agent"
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      PORT: 45876
+      KEY: "${BESZEL_KEY}"
+
+  glance:
+    # dashboard.sinflair.com
+    image: glanceapp/glance
+    container_name: glance
+    volumes:
+      - ./glance.yml:/app/config/glance.yml
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - 8280:8080
+    restart: unless-stopped
+
+#   netdata:
+#     image: netdata/netdata
+#     container_name: netdata
+#     pid: host
+#     network_mode: host
+#     restart: unless-stopped
+#     cap_add:
+#       - SYS_PTRACE
+#       - SYS_ADMIN
+#     security_opt:
+#       - apparmor:unconfined
+#     volumes:
+#       - netdataconfig:/etc/netdata
+#       - netdatalib:/var/lib/netdata
+#       - netdatacache:/var/cache/netdata
+#       - /:/host/root:ro,rslave
+#       - /etc/passwd:/host/etc/passwd:ro
+#       - /etc/group:/host/etc/group:ro
+#       - /etc/localtime:/etc/localtime:ro
+#       - /proc:/host/proc:ro
+#       - /sys:/host/sys:ro
+#       - /etc/os-release:/host/etc/os-release:ro
+#       - /var/log:/host/var/log:ro
+#       - /var/run/docker.sock:/var/run/docker.sock:ro
+#       - /run/dbus:/run/dbus:ro
+
+# volumes:
+#   netdataconfig:
+#   netdatalib:
+#   netdatacache:
